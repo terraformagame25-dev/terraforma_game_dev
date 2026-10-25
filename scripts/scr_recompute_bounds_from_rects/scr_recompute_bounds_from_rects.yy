@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_recompute_bounds_from_rects",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_recompute_bounds_from_rects",
+  "parent":{
+    "name":"Scripts",
+    "path":"folders/Scripts.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

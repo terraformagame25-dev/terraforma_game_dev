@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_max_repro_per_interval",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_max_repro_per_interval",
+  "parent":{
+    "name":"Scripts",
+    "path":"folders/Scripts.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

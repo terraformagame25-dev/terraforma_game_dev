@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_tile_in_other_kingdom",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_tile_in_other_kingdom",
+  "parent":{
+    "name":"Scripts",
+    "path":"folders/Scripts.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}
