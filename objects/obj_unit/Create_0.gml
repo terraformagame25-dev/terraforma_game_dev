@@ -56,9 +56,17 @@ kingdom_id = -1;
 is_leader       = false;
 leader_anchor_x = -1;
 leader_anchor_y = -1;
+home_x          = -1;
+home_y          = -1;
+
+// === Colonist state (expansion rally) ===
+colonist_leader = false;
 
 // === Faction stance ===
 is_hostile = false;
+
+// === Reproduction ===
+repro_cooldown = 0;
 
 // === Explorer seek ===
 seek_target_x = -1;
@@ -70,8 +78,7 @@ harvest_target_x = -1;
 harvest_target_y = -1;
 harvest_timer    = 0;
 harvest_required = 120;
+harvest_retries  = 0;
 
 // === Builder state ===
 build_target_id = noone;
-
-

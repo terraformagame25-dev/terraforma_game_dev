@@ -53,7 +53,6 @@ if (obj_world.block_grid[_my_idx] == 1)
 // ============================================================
 if (village_id != -1 && unit_type != "miner" && !path_allow_res)
 {
-
     if (obj_world.territory_grid[_my_idx] != village_id)
     {
         var _v = global.villages[village_id];
@@ -94,11 +93,42 @@ if (array_length(walk_path) == 0)
         {
             if (harvest_target_x != -1)
             {
-                if (scr_try_harvest(self))
+                var _ridx = harvest_target_x + harvest_target_y * obj_world.world_width;
+
+                if (obj_world.resource_grid[_ridx] == RESOURCE.NONE)
                 {
-                    wander_pause_timer = 10;
+                    // Someone else already harvested it
+                    harvest_target_x = -1;
+                    harvest_target_y = -1;
+                    harvest_timer    = 0;
+                    harvest_retries  = 0;
+                    wander_pause_timer = 5;
+                    _skip_path = true;
                 }
-                _skip_path = true;
+                else if (grid_x == harvest_target_x && grid_y == harvest_target_y)
+                {
+                    harvest_retries = 0;
+                    if (scr_try_harvest(self)) wander_pause_timer = 10;
+                    _skip_path = true;
+                }
+                else if (++harvest_retries > 4)
+                {
+                    // Can't reach it — give up and pick another target
+                    harvest_target_x = -1;
+                    harvest_target_y = -1;
+                    harvest_timer    = 0;
+                    harvest_retries  = 0;
+                    wander_pause_timer = 30;
+                    _skip_path = true;
+                }
+                else
+                {
+                    // Not there yet — (re)path to the target
+                    _target_gx           = harvest_target_x;
+                    _target_gy           = harvest_target_y;
+                    _allow_resource_path = true;
+                    path_cooldown        = irandom_range(5, 15);
+                }
             }
             else
             {
@@ -125,6 +155,7 @@ if (array_length(walk_path) == 0)
                 {
                     if (scr_find_harvest_target(self))
                     {
+                        harvest_retries      = 0;
                         _target_gx           = harvest_target_x;
                         _target_gy           = harvest_target_y;
                         path_cooldown        = irandom_range(5, 15);
@@ -248,89 +279,76 @@ if (array_length(walk_path) == 0)
                     global.village_founder_y  = -1;
                 }
 
-                // 1. CHECK FOR EXPANSION RALLY
+                // 1. COLONIST (expansion rally)
+                //    Unaffiliated villagers that still carry a kingdom_id are colonists.
                 var _is_colonist = false;
                 if (kingdom_id != -1)
                 {
-                    var _k = global.kingdoms[kingdom_id];
+                    var _k = global.kingdoms[kingdom_id];   // struct reference: edits stick
                     if (_k.expansion_rally_active)
                     {
-                        _is_colonist = true;
+                        _is_colonist         = true;
+                        _allow_resource_path = true;
+                        _must_reach          = true;
 
-                        if (colonist_leader)
+                        // --- Leader chooses the founding spot (once) ---
+                        if (colonist_leader && _k.expansion_rally_x == -1)
                         {
-                            // === LEADER LOGIC ===
-                            // Update the rally point to the leader's position
-                            _k.expansion_rally_x = grid_x;
-                            _k.expansion_rally_y = grid_y;
-
-                            // If we don't have a spot yet, find one!
-                            if (_k.expansion_rally_x == grid_x && _k.expansion_rally_y == grid_y)
+                            for (var _r = 12; _r <= 80 && _k.expansion_rally_x == -1; _r += 4)
                             {
-                                // Spiral search from current position
-                                var _found_spot = false;
-                                for (var _r = 12; _r <= 80 && !_found_spot; _r += 4)
+                                for (var _step = 0; _step < 8 && _k.expansion_rally_x == -1; _step++)
                                 {
-                                    for (var _step = 0; _step < 8 && !_found_spot; _step++)
-                                    {
-                                        var _rx = grid_x + lengthdir_x(_r, _step * 45);
-                                        var _ry = grid_y + lengthdir_y(_r, _step * 45);
-                                        
-                                        if (_rx < 0 || _rx >= obj_world.world_width) continue;
-                                        if (_ry < 0 || _ry >= obj_world.world_height) continue;
+                                    var _sx = grid_x + lengthdir_x(_r, _step * 45);
+                                    var _sy = grid_y + lengthdir_y(_r, _step * 45);
 
-                                        if (scr_find_town_hall_spot(_rx, _ry)[0] != -1)
-                                        {
-                                            // Check buffer against all villages
-                                            var _too_close = false;
-                                            for (var _vi = 0; _vi < array_length(global.villages); _vi++)
-                                            {
-                                                var _ev = global.villages[_vi];
-                                                var _dx = 0, _dy = 0;
-                                                if (_rx < _ev.left) _dx = _ev.left - _rx;
-                                                else if (_rx > _ev.right) _dx = _rx - _ev.right;
-                                                if (_ry < _ev.top) _dy = _ev.top - _ry;
-                                                else if (_ry > _ev.bottom) _dy = _ry - _ev.bottom;
-                                                if (max(_dx, _dy) < 10) { _too_close = true; break; }
-                                            }
-                                            
-                                            if (!_too_close)
-                                            {
-                                                _target_gx = _rx;
-                                                _target_gy = _ry;
-                                                _found_spot = true;
-                                            }
-                                        }
+                                    if (_sx < 1 || _sx >= obj_world.world_width  - 1) continue;
+                                    if (_sy < 1 || _sy >= obj_world.world_height - 1) continue;
+
+                                    var _spot = scr_find_town_hall_spot(_sx, _sy);
+                                    if (_spot[0] == -1) continue;
+
+                                    // Keep 10+ tiles from every existing village
+                                    var _too_close = false;
+                                    for (var _vi = 0; _vi < array_length(global.villages); _vi++)
+                                    {
+                                        var _ev  = global.villages[_vi];
+                                        var _ddx = max(_ev.left - _spot[0], 0, _spot[0] - _ev.right);
+                                        var _ddy = max(_ev.top  - _spot[1], 0, _spot[1] - _ev.bottom);
+                                        if (max(_ddx, _ddy) < 10) { _too_close = true; break; }
                                     }
+                                    if (_too_close) continue;
+
+                                    // Must be reachable (one-off cost)
+                                    if (array_length(scr_find_path(grid_x, grid_y, _spot[0], _spot[1], true)) == 0) continue;
+
+                                    _k.expansion_rally_x = _spot[0];
+                                    _k.expansion_rally_y = _spot[1];
                                 }
                             }
-                            
-                            // If already at the spot, stand still
-                            if (grid_x == _target_gx && grid_y == _target_gy)
-                            {
-                                _skip_path = true;
-                            }
+                        }
+
+                        if (_k.expansion_rally_x == -1)
+                        {
+                            // Waiting for the leader to pick a spot
+                            _skip_path         = true;
+                            wander_pause_timer = 30;
                         }
                         else
                         {
-                            // === FOLLOWER LOGIC ===
-                            // Target the current position of the leader (or the rally)
                             _target_gx = _k.expansion_rally_x;
                             _target_gy = _k.expansion_rally_y;
-                            
-                            // If close enough, stand still
-                            if (point_distance(grid_x, grid_y, _target_gx, _target_gy) <= 3)
+
+                            var _arrive_r = colonist_leader ? 0 : 3;
+                            if (point_distance(grid_x, grid_y, _target_gx, _target_gy) <= _arrive_r)
                             {
-                                _skip_path = true;
+                                _skip_path         = true;
+                                wander_pause_timer = 5;
                             }
                         }
-
-                        _allow_resource_path = true;
-                        _must_reach          = true;
                     }
                 }
 
-                // 2. IF NOT A COLONIST, DO BEACON LOGIC
+                // 2. NOT A COLONIST — founding beacon logic
                 if (!_is_colonist)
                 {
                     if (global.village_founder_id == id)
@@ -368,43 +386,17 @@ if (array_length(walk_path) == 0)
             }
             else
             {
-                var _kingdom = global.kingdoms[kingdom_id];
+                // Villager that belongs to a village: just wander inside it.
+                // (The old branch that pulled ALL kingdom villagers to the rally
+                //  point, and cancelled the rally on an out-of-range target, is gone;
+                //  only colonists — village_id == -1 — respond to the rally.)
+                var _wr = max(1, wander_radius);
+                _target_gx = grid_x + irandom_range(-_wr, _wr);
+                _target_gy = grid_y + irandom_range(-_wr, _wr);
 
-                if (_kingdom.expansion_rally_active)
-                {
-                    var _rx = _kingdom.expansion_rally_x;
-                    var _ry = _kingdom.expansion_rally_y;
-
-                    if (_rx < 0 || _rx >= obj_world.world_width
-                     || _ry < 0 || _ry >= obj_world.world_height)
-                    {
-                        _kingdom.expansion_rally_active = false;
-                        _target_gx = grid_x + irandom_range(-wander_radius, wander_radius);
-                        _target_gy = grid_y + irandom_range(-wander_radius, wander_radius);
-                    }
-                    else if (_rx == grid_x && _ry == grid_y)
-                    {
-                        _kingdom.expansion_rally_active = false;
-                        _target_gx = grid_x + irandom_range(-wander_radius, wander_radius);
-                        _target_gy = grid_y + irandom_range(-wander_radius, wander_radius);
-                    }
-                    else
-                    {
-                        _target_gx  = _rx;
-                        _target_gy  = _ry;
-                        _must_reach = true;
-                    }
-                }
-                else
-                {
-                    var _wr = max(1, wander_radius);
-                    _target_gx = grid_x + irandom_range(-_wr, _wr);
-                    _target_gy = grid_y + irandom_range(-_wr, _wr);
-
-                    var _v = global.villages[village_id];
-                    _target_gx = clamp(_target_gx, _v.left, _v.right);
-                    _target_gy = clamp(_target_gy, _v.top,  _v.bottom);
-                }
+                var _v = global.villages[village_id];
+                _target_gx = clamp(_target_gx, _v.left, _v.right);
+                _target_gy = clamp(_target_gy, _v.top,  _v.bottom);
             }
 
             if (_must_reach
@@ -565,9 +557,7 @@ if (walk_index < array_length(walk_path))
     var _target_gx = walk_path[walk_index][0];
     var _target_gy = walk_path[walk_index][1];
 
-    // ============================================================
-    // STEP CLAMP: ultimate safeguard — never step outside village bounds
-    // ============================================================
+    // STEP CLAMP: never step outside village bounds
     if (village_id != -1 && unit_type != "miner" && !path_allow_res)
     {
         var _v = global.villages[village_id];
