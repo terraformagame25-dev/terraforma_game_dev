@@ -1,7 +1,7 @@
 /// @func scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource_goal)
-/// @desc A* pathfinding. _allow_resource_goal (default false) lets the
-///       path target a resource tile — used by miners so they can step
-///       onto trees/stone to harvest.
+/// @desc A* pathfinding (4-directional). _allow_resource_goal lets the path
+///       enter resource tiles (miners / colonists). Search is capped so an
+///       unreachable goal can't flood the whole island.
 function scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource_goal = false)
 {
     var _w     = obj_world.world_width;
@@ -9,26 +9,21 @@ function scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource
     var _grid  = obj_world.terrain_grid;
     var _block = obj_world.block_grid;
 
-    // --- Bounds ---
     if (_goal_gx < 0 || _goal_gx >= _w) return [];
     if (_goal_gy < 0 || _goal_gy >= _h) return [];
 
     var _goal_idx = _goal_gx + _goal_gy * _w;
 
-    // Terrain — always reject water goals
     if (_grid[_goal_idx] == TERRAIN.WATER) return [];
 
-    // Blocked goal — only allow if it's a resource tile AND caller permits
     if (_block[_goal_idx] == 1)
     {
         if (!_allow_resource_goal) return [];
         if (obj_world.resource_grid[_goal_idx] == RESOURCE.NONE) return [];
     }
 
-    // Same tile
     if (_start_gx == _goal_gx && _start_gy == _goal_gy) return [];
 
-    // --- A* data ---
     var _open      = ds_priority_create();
     var _g_scores  = {};
     var _came_from = {};
@@ -42,8 +37,13 @@ function scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource
     var _dx = [ 0, 1, 0, -1];
     var _dy = [-1, 0, 1,  0];
 
+    var _iter     = 0;
+    var _max_iter = 6000;
+
     while (!ds_priority_empty(_open))
     {
+        if (++_iter > _max_iter) break;
+
         var _current = ds_priority_delete_min(_open);
         var _ckey    = string(_current);
 
@@ -69,14 +69,12 @@ function scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource
 
             var _n_idx = _nx + _ny * _w;
 
-            // Blocked neighbor?
             if (_block[_n_idx] == 1)
             {
-			    var _is_resource = (obj_world.resource_grid[_n_idx] != RESOURCE.NONE);
-			    if (!(_allow_resource_goal && _is_resource)) continue;
+                var _is_resource = (obj_world.resource_grid[_n_idx] != RESOURCE.NONE);
+                if (!(_allow_resource_goal && _is_resource)) continue;
             }
 
-            // Terrain
             if (_grid[_n_idx] == TERRAIN.WATER) continue;
 
             var _nkey = string(_n_idx);
@@ -100,17 +98,13 @@ function scr_find_path(_start_gx, _start_gy, _goal_gx, _goal_gy, _allow_resource
     return [];
 }
 
-
-
 /// @func scr_heuristic(_ax, _ay, _bx, _by)
-/// @desc Manhattan distance — correct for 4-directional movement.
 function scr_heuristic(_ax, _ay, _bx, _by)
 {
     return abs(_ax - _bx) + abs(_ay - _by);
 }
 
 /// @func scr_reconstruct_path(_came_from, _start_idx, _goal_idx)
-/// @desc Walk parents from goal back to start, then reverse.
 function scr_reconstruct_path(_came_from, _start_idx, _goal_idx)
 {
     var _w = obj_world.world_width;
@@ -125,7 +119,7 @@ function scr_reconstruct_path(_came_from, _start_idx, _goal_idx)
 
         _current = real(_came_from[$ string(_current)]);
 
-        if (array_length(_path) > 10000) break;   // safety net
+        if (array_length(_path) > 10000) break;
     }
 
     return _path;
