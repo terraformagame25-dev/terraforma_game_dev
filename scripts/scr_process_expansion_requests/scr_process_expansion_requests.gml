@@ -1,8 +1,11 @@
 /// @func scr_process_expansion_requests()
+/// @desc For each kingdom whose capital requests expansion: pick 10 spare
+///       villagers as colonists, choose a leader FROM those colonists, detach
+///       them from the capital and start a rally. The leader chooses the actual
+///       founding spot later (rally_x/y = -1 means "not chosen yet").
 function scr_process_expansion_requests()
 {
     var _min_villagers = 10;
-    var _buffer_radius = 10; 
 
     for (var _k = 0; _k < array_length(global.kingdoms); _k++)
     {
@@ -15,74 +18,67 @@ function scr_process_expansion_requests()
         var _cap = global.villages[_cap_id];
         if (!_cap.expansion_request) continue;
 
-        var _spare_villagers = [];
+        var _spare = [];
         for (var _mi = 0; _mi < array_length(_cap.member_ids); _mi++)
         {
             var _u = _cap.member_ids[_mi];
             if (instance_exists(_u) && _u.unit_type == "villager" && !_u.is_leader)
-            {
-                array_push(_spare_villagers, _u);
-            }
+                array_push(_spare, _u);
         }
 
-        if (array_length(_spare_villagers) < _min_villagers)
+        if (array_length(_spare) < _min_villagers)
         {
             _cap.expansion_request = false;
             global.villages[_cap_id] = _cap;
             continue;
         }
 
-        var _lowest_id = 9999999;
-        var _leader_id = noone;
-        for (var _i = 0; _i < array_length(_spare_villagers); _i++)
-        {
-            var _test_id = _spare_villagers[_i].id;
-            if (_test_id < _lowest_id) {
-                _lowest_id = _test_id;
-                _leader_id = _spare_villagers[_i];
-            }
-        }
+        // Colonists = first N spare villagers; leader = lowest id AMONG THEM
+        var _colonists = [];
+        for (var _i = 0; _i < _min_villagers; _i++) array_push(_colonists, _spare[_i]);
 
-        _kingdom.expansion_rally_active = true;
-        _kingdom.expansion_rally_x = _spare_villagers[0].grid_x; 
-        _kingdom.expansion_rally_y = _spare_villagers[0].grid_y;
-        
-        _cap.expansion_request = false;
-        global.villages[_cap_id] = _cap;
+        var _leader = _colonists[0];
+        for (var _i = 1; _i < array_length(_colonists); _i++)
+            if (_colonists[_i].id < _leader.id) _leader = _colonists[_i];
+
+        _kingdom.expansion_rally_active      = true;
+        _kingdom.expansion_rally_x           = -1;   // leader picks the spot
+        _kingdom.expansion_rally_y           = -1;
+        _kingdom.expansion_rally_age         = 0;
+        _kingdom.expansion_source_village_id = _cap_id;
         global.kingdoms[_k] = _kingdom;
 
-        var _new_cap_members = [];
-        var _w = obj_world.world_width;
-
+        var _new_members = [];
         for (var _ci = 0; _ci < array_length(_cap.member_ids); _ci++)
         {
             var _uid = _cap.member_ids[_ci];
+
             var _is_colonist = false;
-            
-            for (var _si = 0; _si < _min_villagers; _si++) {
-                if (_uid == _spare_villagers[_si]) { _is_colonist = true; break; }
-            }
-
-            if (_is_colonist)
+            for (var _si = 0; _si < array_length(_colonists); _si++)
             {
-                var _u = _uid;
-                _u.village_id = -1; 
-                _u.can_leave_territory = true;      
-                _u.can_walk_on_resources = true;    
-                
-                if (_uid == _leader_id) _u.colonist_leader = true;
-                else                    _u.colonist_leader = false;
-
-                _u.walk_path = [];
-                _u.walk_index = 0;
-                _u.wander_pause_timer = 0;
-                _u.path_cooldown = 0;
+                if (_uid == _colonists[_si]) { _is_colonist = true; break; }
             }
-            else {
-                array_push(_new_cap_members, _uid);
+
+            if (_is_colonist && instance_exists(_uid))
+            {
+                _uid.village_id            = -1;   // kingdom_id stays: marks them as colonists
+                _uid.can_leave_territory   = true;
+                _uid.can_walk_on_resources = true;
+                _uid.colonist_leader       = (_uid == _leader);
+                _uid.walk_path             = [];
+                _uid.walk_index            = 0;
+                _uid.path_allow_res        = false;
+                _uid.wander_pause_timer    = 0;
+                _uid.path_cooldown         = 0;
+            }
+            else
+            {
+                array_push(_new_members, _uid);
             }
         }
-        _cap.member_ids = _new_cap_members;
+
+        _cap.member_ids        = _new_members;
+        _cap.expansion_request = false;
         global.villages[_cap_id] = _cap;
     }
 }

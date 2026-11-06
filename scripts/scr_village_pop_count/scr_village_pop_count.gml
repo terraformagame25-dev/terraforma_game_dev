@@ -1,5 +1,6 @@
 /// @func scr_village_pop_count(_v)
-/// @desc Counts spare villagers in the village (excludes all role-assigned).
+/// @desc Counts living members of the village (all roles, leader included).
+///       scr_try_reproduction relies on this meaning "total population".
 function scr_village_pop_count(_v)
 {
     var _count = 0;

@@ -1,3 +1,4 @@
+/// @func scr_create_kingdom()
 function scr_create_kingdom()
 {
     var _hue = irandom(255);
@@ -14,6 +15,7 @@ function scr_create_kingdom()
         expansion_rally_x:           -1,
         expansion_rally_y:           -1,
         expansion_rally_active:      false,
+        expansion_rally_age:         0,
         expansion_source_village_id: -1,
     };
 

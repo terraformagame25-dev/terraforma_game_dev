@@ -20,7 +20,7 @@ function scr_try_place_houses()
         }
         if (!_has_town_hall) continue;
 
-        // Housing cap check
+        // House count cap
         var _kingdom = global.kingdoms[_v.kingdom_id];
         var _max_houses = scr_max_houses_for_level(_kingdom.advancement_level);
         var _current_houses = scr_village_house_count(_v);
@@ -46,7 +46,6 @@ function scr_try_place_houses()
         var _spot = scr_find_house_spot(_i);
         if (_spot[0] == -1) continue;
 
-        // SAFETY CHECK: Ensure the spot is not in water and is inside the world
         var _w = obj_world.world_width;
         var _h = obj_world.world_height;
         if (_spot[0] < 0 || _spot[0] + 1 >= _w) continue;
@@ -56,11 +55,14 @@ function scr_try_place_houses()
         if (obj_world.terrain_grid[_spot[0] + (_spot[1] + 1) * _w] == TERRAIN.WATER) continue;
         if (obj_world.terrain_grid[(_spot[0] + 1) + (_spot[1] + 1) * _w] == TERRAIN.WATER) continue;
 
-        // Place the house site
+        // Place the house site.
+        // Sprites use a bottom-centre origin (same as the town hall), so a
+        // 2-tile-wide house is centred at (spot_x + 1) * ts, bottom at (spot_y + 2) * ts.
+        // If your house sprite origin is bottom-LEFT, change the x back to _spot[0] * _ts.
         var _ts = obj_world.tile_size;
         var _inst = instance_create_depth(
-            _spot[0] * _ts,
-            _spot[1] * _ts + _ts * 2,
+            (_spot[0] + 1) * _ts,
+            (_spot[1] + 2) * _ts,
             DEPTH.BUILDINGS,
             obj_building
         );
@@ -72,21 +74,17 @@ function scr_try_place_houses()
         _inst.village_id    = _v.id;
         _inst.level         = _kingdom.advancement_level;
 
-        // Footprint (2x2 from bottom-left)
+        // Footprint (2x2)
         _inst.footprint_left   = _spot[0];
         _inst.footprint_top    = _spot[1];
         _inst.footprint_right  = _spot[0] + 1;
         _inst.footprint_bottom = _spot[1] + 1;
 
-        // Block the footprint
-        var _w = obj_world.world_width;
         for (var _dy = 0; _dy <= 1; _dy++)
         {
             for (var _dx = 0; _dx <= 1; _dx++)
             {
-                var _cx = _spot[0] + _dx;
-                var _cy = _spot[1] + _dy;
-                obj_world.block_grid[_cx + _cy * _w] = 1;
+                obj_world.block_grid[(_spot[0] + _dx) + (_spot[1] + _dy) * _w] = 1;
             }
         }
 
